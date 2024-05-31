@@ -1,29 +1,33 @@
+\var{aa}{69}
+
+\f[name,value]{var!}{
+  \var{\$name}{\${$value}}
+}   \# works but is in wrong scope defined (inner)
+
+new command: \fg (same as \f but in global scope)
+
+ \var!{bb}{42}
+
+
+
+
+
 $[loop 0 `[42,69].length` 1]$
 Test
 $[end]$
 
 d
 Parsing:
-1. add default comands like \prefix, \halt
+\# 1. add default comands like \prefix, \halt
 4. prints
 2. loops
 3. ifs
 
-\version{1}
-\prefix{\}  default
-\allowfiles{true}
-\allowurls{true}
-\allowenv{true}
-\allowjs{true}
-.... (am ende:)
-\halt   stop parsing
 
 
-\fn{test}{1}
+\f{test}{1}
 
-\noeval{blabal \if{}{} }   ignore all commands here
 
-\
 
 loop from to step
 maybe alwas parse as js eval default

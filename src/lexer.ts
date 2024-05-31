@@ -12,9 +12,34 @@ const PARAM_ASSIGN = "=";
 const PARAM_SEP = ",";
 const PARAM_END = "]";
 const EVAL_START = "`";
-const EVAL_END= "`";
+const EVAL_END = "`";
 
-export function tokenize(input: string): Token[] {
+export interface TokenizerConfig {
+  prefix: string;
+  argStart: string;
+  argEnd: string;
+  paramStart: string;
+  paramAssign: string;
+  paramSep: string;
+  paramEnd: string;
+  evalStart: string;
+  evalEnd: string;
+}
+
+export function tokenize(
+  input: string,
+  config: TokenizerConfig = {
+    prefix: PREFIX,
+    argStart: ARG_START,
+    argEnd: ARG_END,
+    paramStart: PARAM_START,
+    paramAssign: PARAM_ASSIGN,
+    paramSep: PARAM_SEP,
+    paramEnd: PARAM_END,
+    evalStart: EVAL_START,
+    evalEnd: EVAL_END,
+  }
+): Token[] {
   let row = 0 - ROW_OFFSET; // offset for inserted statements
   let col = 0;
   let index = 0;
@@ -37,12 +62,15 @@ export function tokenize(input: string): Token[] {
     return input.slice(index, index + expected.length) === expected;
   }
 
+  function optionAndPredicate(expected: string, predicate: (char: string) => boolean): boolean {
+    return input.slice(index, index + expected.length) === expected && predicate(input[index + expected.length]);
+  }
+
   function consume(expected: string) {
     if (input.slice(index, index + expected.length) === expected) {
       index += expected.length;
       track(expected);
     } else {
-      log(input);
       err(`Expected "${expected}" got "${input.slice(index, index + expected.length)}"`, row, col);
     }
   }
@@ -70,30 +98,30 @@ export function tokenize(input: string): Token[] {
   function lexCommand() {
     const startRow = row;
     const startCol = col;
-    tokens.push({ type: TokenType.T_PREFIX, value: PREFIX, row, col });
-    consume(PREFIX);
+    tokens.push({ type: TokenType.T_PREFIX, value: config.prefix, row, col });
+    consume(config.prefix);
     const command = consumeWhile(
-      (char) => char !== PARAM_START && char !== ARG_START && char !== " " && char !== "\n" && char !== "\t" && char !== "\r"
+      (char) => char !== config.paramStart && char !== config.argStart && char !== " " && char !== "\n" && char !== "\t" && char !== "\r"
     );
     tokens.push({ type: TokenType.T_CMD, value: command, row: startRow, col: startCol });
 
     // lexKeyValue \foo[a=b,c=\width]{...}...
-    if (option(PARAM_START)) {
-      consume(PARAM_START);
-      tokens.push({ type: TokenType.T_PARAM_START, value: PARAM_START, row, col });
+    if (option(config.paramStart)) {
+      consume(config.paramStart);
+      tokens.push({ type: TokenType.T_PARAM_START, value: config.paramStart, row, col });
 
-      while (index < input.length && !option(PARAM_END)) {
-        const key = consumeUntil((char) => char === PARAM_ASSIGN || char === PARAM_SEP || char === PARAM_END);
+      while (index < input.length && !option(config.paramEnd)) {
+        const key = consumeUntil((char) => char === config.paramAssign || char === config.paramSep || char === config.paramEnd);
         tokens.push({ type: TokenType.T_PARAM_KEY, value: key, row, col });
 
-        if (option(PARAM_ASSIGN)) {
-          consume(PARAM_ASSIGN);
-          tokens.push({ type: TokenType.T_PARAM_ASSIGN, value: PARAM_ASSIGN, row, col });
-          const value = consumeUntil((char) => char === PARAM_SEP || char === PARAM_END);
+        if (option(config.paramAssign)) {
+          consume(config.paramAssign);
+          tokens.push({ type: TokenType.T_PARAM_ASSIGN, value: config.paramAssign, row, col });
+          const value = consumeUntil((char) => char === config.paramSep || char === config.paramEnd);
           // tokens.push({ type: TokenType.T_PARAM, value, row, col });
 
           // tokenize the value
-          const valueTokens = tokenize(value);
+          const valueTokens = tokenize(value, config);
           for (const token of valueTokens) {
             token.row += row; // Adjust the row for nested tokens
             token.col += col; // Adjust the col for nested tokens
@@ -101,21 +129,21 @@ export function tokenize(input: string): Token[] {
           }
         }
 
-        if (option(PARAM_SEP)) {
-          consume(PARAM_SEP);
-          tokens.push({ type: TokenType.T_PARAM_SEP, value: PARAM_SEP, row, col });
+        if (option(config.paramSep)) {
+          consume(config.paramSep);
+          tokens.push({ type: TokenType.T_PARAM_SEP, value: config.paramSep, row, col });
         }
       }
 
-      consume(PARAM_END);
-      tokens.push({ type: TokenType.T_PARAM_END, value: PARAM_END, row, col });
+      consume(config.paramEnd);
+      tokens.push({ type: TokenType.T_PARAM_END, value: config.paramEnd, row, col });
     }
 
-    while (option(ARG_START)) {
+    while (option(config.argStart)) {
       const argStartRow = row;
       const argStartCol = col;
-      consume(ARG_START);
-      tokens.push({ type: TokenType.T_ARG_START, value: ARG_START, row: argStartRow, col: argStartCol });
+      consume(config.argStart);
+      tokens.push({ type: TokenType.T_ARG_START, value: config.argStart, row: argStartRow, col: argStartCol });
 
       let nestedLevel = 1;
       let group = "";
@@ -124,23 +152,23 @@ export function tokenize(input: string): Token[] {
       let groupStartCol = col;
 
       while (nestedLevel > 0 && index < input.length) {
-        if (option(ARG_START)) {
+        if (option(config.argStart)) {
           nestedLevel++;
-          group += ARG_START;
-          track(ARG_START);
+          group += config.argStart;
+          track(config.argStart);
           index++;
-        } else if (option(ARG_END)) {
+        } else if (option(config.argEnd)) {
           nestedLevel--;
           if (nestedLevel > 0) {
-            group += ARG_END;
+            group += config.argEnd;
           }
-          track(ARG_END);
+          track(config.argEnd);
           index++;
-        } else if (option(PREFIX)) {
-          group += PREFIX;
-          track(PREFIX);
+        } else if (option(config.prefix)) {
+          group += config.prefix;
+          track(config.prefix);
           index++;
-          group += consumeWhile((char) => char !== ARG_START && char !== ARG_END && char !== PREFIX);
+          group += consumeWhile((char) => char !== config.argStart && char !== config.argEnd && char !== config.prefix);
         } else {
           group += input[index];
           track(input[index]);
@@ -153,7 +181,7 @@ export function tokenize(input: string): Token[] {
       }
 
       // Recursively tokenize the group for tracking row and col
-      const groupTokens = tokenize(group); // recursion
+      const groupTokens = tokenize(group, config); // recursion
       for (const token of groupTokens) {
         token.row += groupStartRow; // Adjust the row for nested tokens
         token.col += groupStartCol; // Adjust the col for nested tokens
@@ -161,7 +189,7 @@ export function tokenize(input: string): Token[] {
       }
 
       //  tokens.push(...tokenize(group));
-      tokens.push({ type: TokenType.T_ARG_END, value: ARG_END, row, col });
+      tokens.push({ type: TokenType.T_ARG_END, value: config.argEnd, row, col });
     }
   }
 
@@ -169,7 +197,7 @@ export function tokenize(input: string): Token[] {
     const startRow = row;
     const startCol = col;
     const start = index;
-    while (index < input.length && !option(PREFIX)) {
+    while (index < input.length && !optionAndPredicate(config.prefix, validFunctionStart) /* && !option(config.prefix) */) {
       track(input[index]);
       index++;
     }
@@ -180,19 +208,29 @@ export function tokenize(input: string): Token[] {
     const startRow = row;
     const startCol = col;
     const start = index;
-    consume(EVAL_START);
-    while (index < input.length && !option(EVAL_END)) {
+    consume(config.evalStart);
+    while (index < input.length && !option(config.evalEnd)) {
       track(input[index]);
       index++;
     }
-    consume(EVAL_END);
+    consume(config.evalEnd);
     tokens.push({ type: TokenType.T_EVAL, value: input.slice(start, index), row: startRow, col: startCol });
   }
+  //  "\" + non whitespace char
+  const validFunctionStart = (nextChar: string) =>
+    nextChar !== undefined &&
+    nextChar !== "" &&
+    nextChar !== " " &&
+    nextChar !== "\n" &&
+    nextChar !== "\t" &&
+    nextChar !== "\r" &&
+    nextChar !== config.prefix; /* allow escape with double prefix */
 
   while (index < input.length) {
-    if (option(PREFIX)) {
+    if (optionAndPredicate(config.prefix, validFunctionStart)) {
+      // if (option(config.prefix)) {
       lexCommand();
-    } else if (option(EVAL_START)) {
+    } else if (option(config.evalStart)) {
       lexEval();
     } else {
       lexRaw();

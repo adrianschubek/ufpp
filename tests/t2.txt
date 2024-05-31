@@ -26,6 +26,50 @@ define using existing stuff:
 
 \x use (wie function)
 
-\f[name]{delvar}{\${delete $name;}}
+
 \delvar{x}
+
+
+\# \f[x,y]{add}{`$x + $y`}   x und y sind autoamtisch verfügbar in JS eval als $x und $y
+
+\# h  \add{1}{4 +4123}   \#  \x \
+
+
+
+
+\var{foo}{69}
+\$foo
+
+\halt
+
+\f[a]{test}{
+  Hallo \$a \$foo
+  \f{love}{<3 }
+  \love 
+}
+\test{Welt}
+
+\var{aa}{69}
+\$aa
+\var{aa}{88}
+\$aa
+
+\test{}
+
+\# 
+
+\f[name,value]{var!}{
+  \var{\$name}{\${$value}}
+  \${$value}
+  \toparent{$\$name}
+  \$bb
+  \tochild{$foo}
+}   \# works but is in wrong scope defined (inner)
+
+\# new command: \toparent{funcname} moves fun to parent scope
+
+\var!{bb}{2+3}
+
+\$bb
+\del{$bb}
 

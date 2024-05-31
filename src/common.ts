@@ -1,4 +1,5 @@
 import chalk from "chalk";
+import { ASTNode, Params } from "./ast";
 
 export enum TokenType {
   T_RAW = "T_RAW",
@@ -31,31 +32,64 @@ export enum ASTNodeType {
   _USE = "_USE" /* imports. must be top level. parse file then interpret */,
 }
 
+// built in cannot be overriden
 export enum BuiltInFunction {
   LOOP = "loop",
   IF = "if",
   EVAL = "$",
   ENV = "env",
-  F = "f" /* fucntion definition */,
+  F = "f" /* function definition */,
+  RPL = "rpl" /* replace function */,
+  RN = "rn" /* rename function */,
+  DEL = "del" /* remove function */,
+  TOPARENT = "toparent" /* copy toparent function */,
+  TOCHILD = "tochild" /* copy tochild function */,
   COMMENT = "#",
   URL = "url",
   FILE = "file",
   USE = "use",
+  VAR = "var",
+  TRUE = "$true",
+  FALSE = "$false",
+  HALT = "halt" /* stop exec immediate */,
+  ASSERT = "assert" /* assert function */,
 }
 
-export interface Token {
+export interface Token extends Indexable {
   type: TokenType;
   value: string;
   row: number;
   col: number;
 }
 
-export function err(msg: string, row?: number, col?: number): never {
-  if (row === undefined || col === undefined) throw new Error(msg);
-  throw new Error(chalk.red(`${msg} on line ${row}:${col}.`));
+export interface Indexable {
+  row: number;
+  col: number;
 }
 
-export function assertCount<T>(text: string, details: string, thisToken: Token, count: number, args?: T[]) {
+export interface Visitor {
+  visit(node: ASTNode): void;
+}
+
+/**
+ * Check RAW for truthy values
+ *
+ */
+export function truthy(value: string): boolean {
+  const val = value.toLowerCase().trim();
+  return /* val !== "false" && val !== "0" &&  */ val !== "$false";
+}
+
+export function warn(msg: string, row?: number, col?: number): void {
+  // treat warning as errors config?
+  console.log("⚠️ " + chalk.yellow(` ${msg} ${row !== undefined && col !== undefined ? `on line ${row}:${col}.` : ""}\n`));
+}
+
+export function err(msg: string, row?: number, col?: number): never {
+  throw new Error("🔥 " + chalk.red(`${msg} ${row !== undefined && col !== undefined ? `on line ${row}:${col}.` : ""}\n`));
+}
+
+export function assertCount<T>(text: string, details: string, thisToken: Indexable, count: number, args?: T[]) {
   let actual = args?.length ?? 0;
   if (actual !== count) {
     err(
@@ -65,7 +99,7 @@ export function assertCount<T>(text: string, details: string, thisToken: Token, 
     );
   }
 }
-export function assertRange<T>(text: string, details: string, thisToken: Token, min: number, max: number, args?: T[]) {
+export function assertRange<T>(text: string, details: string, thisToken: Indexable, min: number, max: number, args?: T[]) {
   let actual = args?.length ?? 0;
   if (actual < min || actual > max) {
     err(
@@ -76,7 +110,17 @@ export function assertRange<T>(text: string, details: string, thisToken: Token, 
   }
 }
 
-export function assertType<T>(details: string, thisToken: Token, expected: T, actual: T) {
+export function assertFnArgCount<T>(thisToken: Indexable, fnName: string, count: number, args?: T[]) {
+  assertCount("arguments", `in function \\${fnName}`, thisToken, count, args);
+}
+export function assertFnArgRange<T>(thisToken: Indexable, fnName: string, min: number, max: number, args?: T[]) {
+  assertRange("arguments", `in function \\${fnName}`, thisToken, min, max, args);
+}
+export function assertParamCount(thisToken: Indexable, fnName: string, count: number, params: Params | null) {
+  assertCount("parameters", `in function \\${fnName}`, thisToken, count, params?.kv ? Object.values(params.kv) : undefined);
+}
+
+export function assertType<T>(details: string, thisToken: Indexable, expected: T, actual: T) {
   if (actual !== expected) {
     err(`Expected ${chalk.redBright(expected)} but got ${chalk.redBright(actual)} ${details}`, thisToken.row, thisToken.col);
   }

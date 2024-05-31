@@ -1,0 +1,6 @@
+\# variables
+\f[name,value]{var!}{\var{\$name}{\${\$value}}}
+\f[name]{delvar}{\${delete $name;}}
+\# functions
+\rename{oldname}{newname}
+\delete{name}

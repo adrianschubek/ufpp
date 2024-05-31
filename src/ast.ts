@@ -1,34 +1,35 @@
-import { ASTNodeType } from "./common";
+import { ASTNodeType, Indexable } from "./common";
+import { Visitor } from "./visitor";
 
-export abstract class ASTNode {
+export abstract class ASTNode implements Indexable {
   type: ASTNodeType;
-  constructor(type: ASTNodeType) {
+  row: number;
+  col: number;
+  constructor(type: ASTNodeType, row: number, col: number) {
     this.type = type;
+    this.row = row;
+    this.col = col;
   }
-  visit(): void {
-    // check for interrupt
-  }
+  abstract accept<T>(visitor: Visitor<T>): T; // check for interrupt
 }
 export class Program extends ASTNode {
-  body: ASTNode[];
-  constructor(body: ASTNode[]) {
-    super(ASTNodeType.PROG);
-    this.body = body;
+  accept<T>(visitor: Visitor<T>): T {
+    return visitor.visitProgram(this);
   }
-  visit(): void {
-    super.visit();
-    throw new Error("Method not implemented.");
+  body: ASTNode[];
+  constructor(body: ASTNode[], row: number, col: number) {
+    super(ASTNodeType.PROG, row, col);
+    this.body = body;
   }
 }
 export class Raw extends ASTNode {
-  value: string;
-  constructor(value: string) {
-    super(ASTNodeType.RAW);
-    this.value = value;
+  accept<T>(visitor: Visitor<T>): T {
+    return visitor.visitRaw(this);
   }
-  visit(): void {
-    super.visit();
-    throw new Error("Method not implemented.");
+  value: string;
+  constructor(value: string, row: number, col: number) {
+    super(ASTNodeType.RAW, row, col);
+    this.value = value;
   }
 }
 /**
@@ -36,19 +37,17 @@ export class Raw extends ASTNode {
  * Not a built-in function
  */
 export class FunctionCall extends ASTNode {
+  accept<T>(visitor: Visitor<T>): T {
+    return visitor.visitFunctionCall(this);
+  }
   name: string;
   params: Params;
   args: ASTNode[];
-  constructor(name: string, params?: Params, args?: ASTNode[]) {
-    super(ASTNodeType.F_CALL);
+  constructor(name: string, params: Params | null, args: ASTNode[], row: number, col: number) {
+    super(ASTNodeType.F_CALL, row, col);
     this.name = name;
-    this.params = params ?? new Params({});
+    this.params = params ?? new Params({}, row, col);
     this.args = args ?? [];
-  }
-
-  visit(): void {
-    super.visit();
-    throw new Error("Method not implemented.");
   }
 }
 /**
@@ -56,57 +55,57 @@ export class FunctionCall extends ASTNode {
  * x und y sind automatisch verfügbar in JS eval
  */
 export class FunctionDefinition extends ASTNode {
+  accept<T>(visitor: Visitor<T>): T {
+    return visitor.visitFunctionDefinition(this);
+  }
   name: ASTNode;
   // arguments [x,y]  only key is relevant  maybe later use =string =int for type checking
   fnArgs: Params;
   body: ASTNode;
-  constructor(name: ASTNode, fnArgs: Params, body: ASTNode) {
-    super(ASTNodeType.F_DEF);
+  constructor(name: ASTNode, fnArgs: Params, body: ASTNode, row: number, col: number) {
+    super(ASTNodeType.F_DEF, row, col);
     this.name = name;
     this.fnArgs = fnArgs;
     this.body = body;
-  }
-  visit(): void {
-    super.visit();
-    throw new Error("Method not implemented.");
   }
 }
 /**
  * [a=b,c=d,...] and [arg1,arg2,..]
  */
 export class Params extends ASTNode {
-  kv: { [key: string]: ASTNode | null };
-  constructor(kv: { [key: string]: ASTNode | null }) {
-    super(ASTNodeType.PARAMS);
-    this.kv = kv;
+  accept<T>(visitor: Visitor<T>): T {
+    return visitor.visitParams(this);
   }
-  visit(): void {
-    super.visit();
-    throw new Error("Method not implemented.");
+  kv: { [key: string]: ASTNode | null };
+  constructor(kv: { [key: string]: ASTNode | null }, row: number, col: number) {
+    super(ASTNodeType.PARAMS, row, col);
+    this.kv = kv;
   }
 }
 export class IfStatement extends ASTNode {
+  accept<T>(visitor: Visitor<T>): T {
+    return visitor.visitIfStatement(this);
+  }
   condition: ASTNode;
   trueBranch: ASTNode;
   falseBranch: ASTNode;
-  constructor(condition: ASTNode, trueBranch: ASTNode, falseBranch: ASTNode) {
-    super(ASTNodeType._IF);
+  constructor(condition: ASTNode, trueBranch: ASTNode, falseBranch: ASTNode, row: number, col: number) {
+    super(ASTNodeType._IF, row, col);
     this.condition = condition;
     this.trueBranch = trueBranch;
     this.falseBranch = falseBranch;
   }
-  visit(): void {
-    super.visit();
-    throw new Error("Method not implemented.");
-  }
 }
 export class LoopStatement extends ASTNode {
+  accept<T>(visitor: Visitor<T>): T {
+    return visitor.visitLoopStatement(this);
+  }
   init: ASTNode;
   condition: ASTNode;
   increment: ASTNode;
   body: ASTNode;
-  constructor(init: ASTNode, condition: ASTNode, increment: ASTNode, body: ASTNode) {
-    super(ASTNodeType._LOOP);
+  constructor(init: ASTNode, condition: ASTNode, increment: ASTNode, body: ASTNode, row: number, col: number) {
+    super(ASTNodeType._LOOP, row, col);
     this.init = init;
     this.condition = condition;
     this.increment = increment;
@@ -114,57 +113,64 @@ export class LoopStatement extends ASTNode {
   }
 }
 export class URLStatement extends ASTNode {
-  url: ASTNode;
-  constructor(url: ASTNode) {
-    super(ASTNodeType._URL);
-    this.url = url;
+  accept<T>(visitor: Visitor<T>): T {
+    return visitor.visitURLStatement(this);
   }
-  visit(): void {
-    super.visit();
-    throw new Error("Method not implemented.");
+  url: ASTNode;
+  constructor(url: ASTNode, row: number, col: number) {
+    super(ASTNodeType._URL, row, col);
+    this.url = url;
   }
 }
 export class FileStatement extends ASTNode {
-  path: ASTNode;
-  constructor(path: ASTNode) {
-    super(ASTNodeType._FILE);
-    this.path = path;
+  accept<T>(visitor: Visitor<T>): T {
+    return visitor.visitFileStatement(this);
   }
-  visit(): void {
-    super.visit();
-    throw new Error("Method not implemented.");
+  path: ASTNode;
+  constructor(path: ASTNode, row: number, col: number) {
+    super(ASTNodeType._FILE, row, col);
+    this.path = path;
   }
 }
 export class UseStatement extends ASTNode {
+  accept<T>(visitor: Visitor<T>): T {
+    return visitor.visitUseStatement(this);
+  }
   code: ASTNode;
-  constructor(code: ASTNode) {
-    super(ASTNodeType._USE);
+  constructor(code: ASTNode, row: number, col: number) {
+    super(ASTNodeType._USE, row, col);
     this.code = code;
   }
-  visit(): void {
-    super.visit();
-    throw new Error("Method not implemented.");
-  }
 }
-export class EvalExpr extends ASTNode {
-  expr: string;
-  constructor(expr: string) {
-    super(ASTNodeType.EVAL);
-    this.expr = expr;
+export class EvalStatement extends ASTNode {
+  accept<T>(visitor: Visitor<T>): T {
+    return visitor.visitEvalStatement(this);
   }
-  visit(): void {
-    super.visit();
-    throw new Error("Method not implemented.");
+  expr: string;
+  constructor(expr: string, row: number, col: number) {
+    super(ASTNodeType.EVAL, row, col);
+    this.expr = expr;
   }
 }
 export class Comment extends ASTNode {
+  accept<T>(visitor: Visitor<T>): T {
+    return visitor.visitComment(this);
+  }
   value: string;
-  constructor(value: string) {
-    super(ASTNodeType.COMMENT);
+  constructor(value: string, row: number, col: number) {
+    super(ASTNodeType.COMMENT, row, col);
     this.value = value;
   }
-  visit(): void {
-    super.visit();
-    throw new Error("Method not implemented.");
-  }
+}
+
+// export function converter<I extends ASTNode, O extends ASTNode>(inputAST: I, inputASTNodeType: ASTNodeType, outputFactory: (input: I) => O): O {
+//   if (inputAST.type === inputASTNodeType) return inputAST as unknown as O;
+//   return new outputClass(inputAST.row, inputAST.col);
+// }
+export function convertRawToEval(input: Raw | EvalStatement): EvalStatement {
+  if (input.type === ASTNodeType.EVAL) return input as EvalStatement;
+  return new EvalStatement((input as Raw).value, input.row, input.col);
+}
+export function convertEvalToRaw(input: EvalStatement): Raw {
+  return new Raw(input.expr, input.row, input.col);
 }

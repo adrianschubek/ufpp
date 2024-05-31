@@ -5,7 +5,7 @@ import {
   FunctionCall,
   Params,
   Comment,
-  EvalExpr,
+  EvalStatement,
   FunctionDefinition,
   IfStatement,
   LoopStatement,
@@ -53,14 +53,20 @@ export function parse(input: Token[], isRecursiveCall: boolean = false): ASTNode
   function assertFnArgRange(thisToken: Token, min: number, max: number, args?: ASTNode[]) {
     assertRange("arguments", `in function \\${thisToken.value}`, thisToken, min, max, args);
   }
-  function assertParamCount(thisToken: Token, count: number, params?: Params) {
+  function assertParamCount(thisToken: Token, count: number, params: Params | null) {
     assertCount("parameters", `in function \\${thisToken.value}`, thisToken, count, params?.kv ? Object.values(params.kv) : undefined);
+  }
+  function rowcol(token?: Token): [number, number] {
+    if (!token) return [-1, -1];
+    return [token.row, token.col];
   }
 
   const root: ASTNode[] = [];
+  let rc: [number, number] = [-1, -1];
 
   loop: while (input.length > 0) {
     const token = peek();
+    rc = rowcol(token);
     switch (token.type) {
       case TokenType.T_RAW:
         root.push(parseRaw());
@@ -79,17 +85,17 @@ export function parse(input: Token[], isRecursiveCall: boolean = false): ASTNode
 
   function parseRaw(): ASTNode {
     const t = consume(TokenType.T_RAW);
-    return new Raw(t.value);
+    return new Raw(t.value, ...rowcol(t));
   }
 
   function parseEval(): ASTNode {
     const t = consume(TokenType.T_EVAL);
-    return new EvalExpr(t.value.slice(1, -1));
+    return new EvalStatement(t.value.slice(1, -1), ...rowcol(t));
   }
 
   function parseParams(): Params {
     const kv: { [key: string]: ASTNode | null } = {};
-    consume(TokenType.T_PARAM_START);
+    const ps = consume(TokenType.T_PARAM_START);
 
     while (!option(TokenType.T_PARAM_END)) {
       const key = consume(TokenType.T_PARAM_KEY);
@@ -106,21 +112,21 @@ export function parse(input: Token[], isRecursiveCall: boolean = false): ASTNode
     }
     consume(TokenType.T_PARAM_END);
 
-    return new Params(kv);
+    return new Params(kv, ...rowcol(ps));
   }
 
   function parseArguments(alwaysEvalNArgs?: number): ASTNode[] {
-    consume(TokenType.T_ARG_START);
+    const as = consume(TokenType.T_ARG_START);
     const args: ASTNode[] = [];
 
-    // may break if JS contains { }
+    // FIXME may break if JS contains { }.
     while (alwaysEvalNArgs && alwaysEvalNArgs > 0) {
       alwaysEvalNArgs--;
       let evalCode = "";
       while (!option(TokenType.T_ARG_END)) evalCode += consumeAny().value;
       consume(TokenType.T_ARG_END);
       consume(TokenType.T_ARG_START);
-      args.push(new EvalExpr(evalCode));
+      args.push(new EvalStatement(evalCode, ...rowcol(as)));
     }
 
     while (hasMore()) {
@@ -140,18 +146,17 @@ export function parse(input: Token[], isRecursiveCall: boolean = false): ASTNode
     // before params and args parsing
     switch (cmd.value) {
       case BuiltInFunction.COMMENT:
-        // short circuit for comments. dont evaluate anything
-        consume(TokenType.T_ARG_START);
+        // linecomment
         const ignoredTokens = [];
-        while (!option(TokenType.T_ARG_END)) ignoredTokens.push(consumeAny());
-        consume(TokenType.T_ARG_END);
-        return new Comment(ignoredTokens.map((t) => t.value).join(""));
+        const line = cmd.row;
+        while (hasMore() && peek().row === line) ignoredTokens.push(consumeAny());
+        return new Comment(ignoredTokens.map((t) => t.value).join(""), ...rowcol(cmd));
       case BuiltInFunction.EVAL:
         consume(TokenType.T_ARG_START);
         const evalTokens = [];
         while (!option(TokenType.T_ARG_END)) evalTokens.push(consumeAny());
         consume(TokenType.T_ARG_END);
-        return new EvalExpr(evalTokens.map((t) => t.value).join(""));
+        return new EvalStatement(evalTokens.map((t) => t.value).join(""), ...rowcol(cmd));
     }
 
     // handle function with ! -> evaluate 1st argument always as EVAL.
@@ -170,47 +175,45 @@ export function parse(input: Token[], isRecursiveCall: boolean = false): ASTNode
       }
     }
 
-    const params = option(TokenType.T_PARAM_START) ? parseParams() : undefined;
+    const params = option(TokenType.T_PARAM_START) ? parseParams() : new Params({}, ...rowcol(cmd));
     const args = option(TokenType.T_ARG_START) ? parseArguments(treatNArgsAsEval) : [];
 
     // check if built-in function except comment
     switch (cmd.value) {
       case BuiltInFunction.F:
         assertFnArgCount(cmd, 2, args);
-        return new FunctionDefinition(args[0], params as Params, args[1]);
+        return new FunctionDefinition(args[0], params, args[1], ...rowcol(cmd));
       case BuiltInFunction.IF:
       case BuiltInFunction.IF + "!":
         assertFnArgRange(cmd, 2, 3, args);
         assertParamCount(cmd, 0, params);
-        return new IfStatement(args[0], args[1], args[2]);
+        return new IfStatement(args[0], args[1], args[2], ...rowcol(cmd));
       case BuiltInFunction.LOOP:
       case BuiltInFunction.LOOP + "!":
         assertFnArgCount(cmd, 4, args);
         assertParamCount(cmd, 0, params);
-        return new LoopStatement(args[0], args[1], args[2], args[3]);
+        return new LoopStatement(args[0], args[1], args[2], args[3], ...rowcol(cmd));
       case BuiltInFunction.URL:
       case BuiltInFunction.URL + "!":
         assertFnArgCount(cmd, 1, args);
         assertParamCount(cmd, 0, params);
-        return new URLStatement(args[0]);
+        return new URLStatement(args[0], ...rowcol(cmd));
       case BuiltInFunction.FILE:
       case BuiltInFunction.FILE + "!":
         assertFnArgCount(cmd, 1, args);
         assertParamCount(cmd, 0, params);
-        return new FileStatement(args[0]);
+        return new FileStatement(args[0], ...rowcol(cmd));
       case BuiltInFunction.USE:
       case BuiltInFunction.USE + "!":
         assertFnArgCount(cmd, 1, args);
         assertParamCount(cmd, 0, params);
-        return new UseStatement(args[0]);
+        return new UseStatement(args[0], ...rowcol(cmd));
       default:
         // else function call like \foobar[..]{...}...
         console.warn(cmd.value);
-        return new FunctionCall(cmd.value, params, args);
+        return new FunctionCall(cmd.value, params, args, ...rowcol(cmd));
     }
   }
 
-  function parseIfCmd(): ASTNode {}
-
-  return new Program(root);
+  return new Program(root, ...rc);
 }
