@@ -1,0 +1,92 @@
+$[loop 0 `[42,69].length` 1]$
+Test
+$[end]$
+
+d
+Parsing:
+1. add default comands like \prefix, \halt
+4. prints
+2. loops
+3. ifs
+
+\version{1}
+\prefix{\}  default
+\allowfiles{true}
+\allowurls{true}
+\allowenv{true}
+\allowjs{true}
+.... (am ende:)
+\halt   stop parsing
+
+
+\fn{test}{1}
+
+\noeval{blabal \if{}{} }   ignore all commands here
+
+\
+
+loop from to step
+maybe alwas parse as js eval default
+\loop{0}{[42,69].length}{1}{
+    Test
+}
+ -> unroll step -> eval params from,to,step as int
+Test
+Test
+
+
+\map{[1,2,3]}{
+    \print{\item}
+}
+-> 1 2 3
+
+\${42 + 69 $y \x }
+
+
+no linebreak/whitespace/spaces \nolf
+
+\match{\env{HOME}}{\nolf
+  \case{}
+}
+
+\${1+2}   <-- always eval!
+
+\match{\${1 + 2}}{
+  \case{3}{ja}
+  \case{4}{nein}
+}
+
+---
+allow imports from files/ urls like deno
+\use{\url{https://example.com/cmds.utpp}} \#{sha256 validation. reject if hash mismatch} [sha256=.....]
+\use{\file{cmds.utpp}}
+\use{net} built in package
+
+\fn[arg1,arg2]{name}{body}
+\redefine...
+
+
+\ifn{1 == 1}{
+    t
+}{
+    f}
+
+\js{const i = 0;}   will not be printed onyl eval
+\${const i = 0;}
+
+\print{"Home is " + process.env.HOME} will be printed
+\={"Home is " + process.env.HOME}
+
+nested if
+\if{1 == 1}{
+    \if{2 == 2}{
+        Test
+    }
+}{
+  else part
+}
+ -> unroll if -> eval condition -> create if statement
+
+\file{incl.txt}
+\url{https://example.com}
+\env{HOME}

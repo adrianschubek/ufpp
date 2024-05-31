@@ -1,6 +1,6 @@
 {
   "name": "utpp",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Universal Text Pre-Processor",
   "main": "bin/index.js",
   "bin": "bin/npx.js",

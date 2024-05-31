@@ -29,3 +29,14 @@
 - Start a supervisor service conditionally using docker run arguments. 
 - Use different compile commands based on user's current architecture
 - and many more...
+
+
+<!-- 
+nodemon --ext 'txt,ts'  out/index.js -p tests/loop.txt
+
+wie latex multi-pass erst loops -> ...
+add latex syntax
+ - allow custom prefix instead of `\` allow e.g. `##`
+TODO: add loops (polyfill using rewriting)
+TODO: allow nesting
+ -->

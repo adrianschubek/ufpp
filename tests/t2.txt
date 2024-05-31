@@ -1,0 +1,31 @@
+\f[x,y]{add}{`$x + $y`}   x und y sind autoamtisch verfügbar in JS eval als $x und $y
+
+\add{1}{2}  
+
+mit ! always condition eval als JS 
+
+\if!{x > 1 \a}{x ist größer als 1}{`a`x ist `yy` kleiner oder gleich 1}
+
+init cond increment body
+\loop!{1}{x > 0}{x--}{`x`}
+
+\if!{x > 0}{
+  \if!{x > 5}{
+   blala \x
+  }{}
+}{
+  oo
+}
+variable == function
+define using existing stuff:
+\f[name,value]{var!}{\${let $name = $value;}}
+\var!{x}{val} ist gleiche wie function definition rewrite zu \f{x}{\${val}}
+
+\f[name,value]{var}{\${let $name = `$value`;}}
+\var{x}{val}  ist gleiche wie function definition rewrite zu \f{x}{val}
+
+\x use (wie function)
+
+\f[name]{delvar}{\${delete $name;}}
+\delvar{x}
+
