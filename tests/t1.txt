@@ -1,0 +1,25 @@
+Foobar
+Die Zeit ist  \${new Date()}. 
+ \${1 + 1}
+
+\f[name,value]{var!}{
+  \var{\$name}{\${$value}}
+  \toparent{$\$name}
+} 
+
+\var!{b}{" => " + 0.2+0.3 }
+
+\var{a}{0.2+0.3}
+\var{c}{\${0.2+0.3}}
+
+\$a
+\$b
+\$c
+
+
+\f[x,y]{add}{`$x + $y`}
+
+\add{42}{69}
+
+
+\if{$false}{true}{false}

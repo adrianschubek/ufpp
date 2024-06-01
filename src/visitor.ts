@@ -193,6 +193,7 @@ export class Interpreter implements Visitor<string> {
     const fnBody = node.body; // unvisited yet
 
     this.functions.set(fnName, { fnArgs, fnBody }); // FIXME <-- pollutes this global scope with fnArgs
+    // TODO: easy fix prepend and late rremove function name like $foo:arg1
 
     return "";
   }
@@ -232,11 +233,12 @@ export class Interpreter implements Visitor<string> {
     // get variables starting with $ from functions
     const context: { [key: string]: string | null } = {};
     for (const [key, value] of this.functions) {
+      // console.log(key, value);
       if (key.startsWith("$")) {
         context[key] = value.fnBody.accept(this);
       }
     }
-    console.log(js, context);
+
     return evaluate(js, context);
   }
   visitComment(node: Comment): string {
@@ -257,21 +259,40 @@ function rowcol(token: ASTNode): [number, number] {
 }
 
 function evaluate(code: string, context: { [key: string]: string | null }): string {
-  function escapeVariable(val: string | null): string {
-    if (val === null) return "";
-    if (!val.includes('"')) return '"' + val + '"';
-    if (!val.includes("'")) return "'" + val + "'";
-    if (!val.includes("`")) return "`" + val + "`";
-    warn(`Could not escape variable ${val}. Tried all seperators but none is compatible.`);
-    return val;
+  // replace all $<val> with context[val]
+  for (const [key, value] of Object.entries(context)) {
+    code = code.replaceAll(key, value ?? "");
   }
 
-  const template = `${Object.entries(context)
-    .map(([key, value]) => `let ${key} = ${escapeVariable(value)};`)
-    .join("\n")}
-    return ${code};`;
-  console.log(template);
-  return Function(template)();
+  return Function(`return ${code};`)();
+
+  // ---
+  // function escapeVariable(val: string | null): string {
+  //   if (val === null) return "";
+  //   if (!val.includes('"')) return '"' + val + '"';
+  //   if (!val.includes("'")) return "'" + val + "'";
+  //   if (!val.includes("`")) return "`" + val + "`";
+  //   warn(`Could not escape variable ${val}. Tried all seperators but none is compatible.`);
+  //   return val;
+  // }
+
+  // // only include variables that are used in the code
+  // const usedVariables = Object.entries(context).filter(([key, _]) => code.includes(key));
+
+  // // if suffix :escape -> escape the variable
+  // usedVariables.forEach(([key, value]) => {
+  //   if (code.includes(key + ":escape")) {
+  //     code = code.replaceAll(key + ":escape", escapeVariable(value));
+  //   }
+  // });
+  // console.log(code)
+
+  // const template = `${usedVariables.map(([key, value]) => `let ${key} = ${value};`).join("\n")}
+  //   return ${code};`;
+  // console.log("_____________________");
+  // console.log(template);
+  // console.log("_____________________");
+  // return Function(template)();
 }
 
 /**

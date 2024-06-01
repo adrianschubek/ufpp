@@ -1,6 +1,9 @@
 \# variables
-\f[name,value]{var!}{\var{\$name}{\${\$value}}}
-\f[name]{delvar}{\${delete $name;}}
+\f[name,value]{var!}{
+  \var{\$name}{\${$value}}
+  \toparent{$\$name}
+} 
+
 \# functions
 \rename{oldname}{newname}
 \delete{name}
