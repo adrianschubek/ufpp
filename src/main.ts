@@ -6,12 +6,18 @@ import { interpret } from "./visitor";
 import { preprocess } from "./preprocessor";
 import chalk from "chalk";
 import { analyze } from "./analyzer";
+import { Program } from "./ast";
+import { DefaultConfig } from "./common";
 
 let original = "";
-//  original = fs.readFileSync(__dirname + "/../tests/loop.txt", "utf8");
-//  original = fs.readFileSync(__dirname + "/../tests/t1.txt", "utf8");
-// original = fs.readFileSync(__dirname + "/../tests/t3.php", "utf8");
-original = fs.readFileSync(__dirname + "/../tests/t4.txt", "utf8");
+const encoding = "utf8";
+// const filename = "loop.txt";
+// const filename = "t1.txt";
+// const filename = "t3.php";
+const filename = "t4.txt";
+const filepath = __dirname + "/../tests/";
+
+original = fs.readFileSync(filepath + filename, encoding);
 
 // \rawfile{path} imports the file, just copo/pastes the file content, no pipeline
 // allow file importsw: \file{name} just copo/pastes the file content
@@ -27,9 +33,14 @@ console.log(chalk.yellowBright(chalk.bold(`🚀 utpp ${pj.version} `)));
 // log("===== content: =====");
 // log(original);
 
+const initConfig = DefaultConfig;
+initConfig["fileName"] = filename;
+initConfig["filePath"] = filepath;
+initConfig["fileEncoding"] = encoding;
+
 // 1. preprocessor (Meta Config)
 log("===== preprocess: =====");
-const [input, config] = preprocess(original);
+const [input, config] = preprocess(original, initConfig);
 
 console.log("with config: ", config);
 
@@ -46,17 +57,18 @@ log(tokenized);
 
 // 3. parser (AST)
 log("===== parse: =====");
-const ast = parse(tokenized);
-const treeify = require("./utils/treeify"); // debug
-treeify.asLines(ast, true, false, log); // debug
+const ast = parse(tokenized, false, config);
 
 // 4. AST Analyzer (imports, verify enabled/disabled features)
 log("===== analyze: =====");
 const program = analyze(ast, config);
 
+const treeify = require("./utils/treeify"); // debug
+treeify.asLines(program, true, false, log); // debug
+
 // 5. interpreter (Execute on complete resolved AST)
 log("===== interpret: =====");
-const generated = interpret(program);
+const generated = interpret(program, config);
 log(generated);
 log("----------------------");
 

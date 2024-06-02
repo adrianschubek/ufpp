@@ -1,7 +1,7 @@
 import { log } from "console";
 import {
   ASTNode,
-  Raw,
+  RawStatement,
   Program,
   FunctionCall,
   Params,
@@ -14,7 +14,7 @@ import {
   FileStatement,
   UseStatement,
 } from "./ast";
-import { BuiltInFunction, Token, TokenType, assertCount, assertRange, err } from "./common";
+import { BuiltInFunction, Config, Token, TokenType, assertCount, assertParamRange, assertRange, err } from "./common";
 
 // ne Build CST from tokens like \if{}{} --> Command(name="if",args=2...)
 // ne  Build AST from CST like Command(name="if",args=2...) --> IfStatement(condition=...,trueBranch=...,falseBranch=...)
@@ -22,7 +22,7 @@ import { BuiltInFunction, Token, TokenType, assertCount, assertRange, err } from
 /**
  * Parse tokens into an Abstract Syntax Tree (AST)
  */
-export function parse(input: Token[], isRecursiveCall: boolean = false): ASTNode {
+export function parse(input: Token[], isRecursiveCall: boolean = false, config: Config): Program {
   // Helpers
   function option(expected: TokenType): boolean {
     return peek()?.type === expected;
@@ -49,13 +49,16 @@ export function parse(input: Token[], isRecursiveCall: boolean = false): ASTNode
   }
 
   function assertFnArgCount(thisToken: Token, count: number, args?: ASTNode[]) {
-    assertCount("arguments", `in function \\${thisToken.value}`, thisToken, count, args);
+    assertCount("arguments", `in function \\${thisToken.value}`, thisToken, count, args, config);
   }
   function assertFnArgRange(thisToken: Token, min: number, max: number, args?: ASTNode[]) {
-    assertRange("arguments", `in function \\${thisToken.value}`, thisToken, min, max, args);
+    assertRange("arguments", `in function \\${thisToken.value}`, thisToken, min, max, args, config);
   }
   function assertParamCount(thisToken: Token, count: number, params: Params | null) {
-    assertCount("parameters", `in function \\${thisToken.value}`, thisToken, count, params?.kv ? Object.values(params.kv) : undefined);
+    assertCount("parameters", `in function \\${thisToken.value}`, thisToken, count, params?.kv ? Object.values(params.kv) : undefined, config);
+  }
+  function assertParamRange(thisToken: Token, min: number, max: number, params: Params | null) {
+    assertRange("parameters", `in function \\${thisToken.value}`, thisToken, min, max, params?.kv ? Object.values(params.kv) : undefined, config);
   }
   function rowcol(token?: Token): [number, number] {
     if (!token) return [-1, -1];
@@ -86,7 +89,7 @@ export function parse(input: Token[], isRecursiveCall: boolean = false): ASTNode
 
   function parseRaw(): ASTNode {
     const t = consume(TokenType.T_RAW);
-    return new Raw(t.value, ...rowcol(t));
+    return new RawStatement(t.value, ...rowcol(t));
   }
 
   function parseEval(): ASTNode {
@@ -104,7 +107,7 @@ export function parse(input: Token[], isRecursiveCall: boolean = false): ASTNode
       // allow [arg1,arg2,...]
       if (option(TokenType.T_PARAM_ASSIGN)) {
         consume(TokenType.T_PARAM_ASSIGN);
-        value = parse(input, true);
+        value = parse(input, true, config);
       }
       // [foo=bar]
       kv[key.value] = value ?? null;
@@ -119,7 +122,9 @@ export function parse(input: Token[], isRecursiveCall: boolean = false): ASTNode
   function parseArguments(alwaysEvalNArgs?: number): ASTNode[] {
     const args: ASTNode[] = [];
 
-    // FIXME may break if JS contains { }.
+    // TODO: change to something with indexes so allow anypart to be evald
+
+    // may break if JS contains { }. As workaround use other syntax ` `
     while (alwaysEvalNArgs && alwaysEvalNArgs > 0 && hasMore() && option(TokenType.T_ARG_START)) {
       const as = consume(TokenType.T_ARG_START);
       alwaysEvalNArgs--;
@@ -132,7 +137,7 @@ export function parse(input: Token[], isRecursiveCall: boolean = false): ASTNode
 
     while (hasMore() && option(TokenType.T_ARG_START)) {
       consume(TokenType.T_ARG_START);
-      const arg = parse(input, true);
+      const arg = parse(input, true, config);
       args.push(arg);
       consume(TokenType.T_ARG_END);
     }
@@ -170,6 +175,7 @@ export function parse(input: Token[], isRecursiveCall: boolean = false): ASTNode
         case BuiltInFunction.FILE + "!":
         case BuiltInFunction.URL + "!":
         case BuiltInFunction.USE + "!":
+        case BuiltInFunction.HALT + "!":
           treatNArgsAsEval = 1;
           break;
       }
@@ -205,9 +211,8 @@ export function parse(input: Token[], isRecursiveCall: boolean = false): ASTNode
         return new FileStatement(args[0], ...rowcol(cmd));
       case BuiltInFunction.USE:
       case BuiltInFunction.USE + "!":
-        assertFnArgCount(cmd, 1, args);
-        assertParamCount(cmd, 0, params);
-        return new UseStatement(args[0], ...rowcol(cmd));
+        assertFnArgRange(cmd, 1, 2, args);
+        return new UseStatement(args[0], params, args[1], ...rowcol(cmd));
       default:
         // else function call like \foobar[..]{...}...
         console.warn(cmd.value);

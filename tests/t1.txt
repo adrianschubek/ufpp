@@ -7,8 +7,6 @@ Die Zeit ist  \${new Date()}.
   \toparent{$\$name}
 } 
 
-\f{true}{\true}
-\f{false}{\false}
 
 wie latex mit placehodlers
 \f[2]{and}{\and{#1}{#2}}
@@ -42,13 +40,17 @@ allow dynamic number of arguments
 \if{123}{TT}
 
 
+\\\utpp[
+  uuu=9,
+  prefix=a,
+]
+\\\utpp[
+  prefix=\,
+]
 
 
-
-
-
-\halt{fertig}
-
+\file!{1+2}
+\var{foo}{\${123}}
 Match:
 \match{value}{
   Dies
@@ -59,13 +61,3 @@ Match:
   \case{true}{999} \# default
   Test
 }
-
-
-
-\\\utpp[
-  uuu=9,
-  prefix=a,
-]
-\\\utpp[
-  prefix=\,
-]

@@ -5,6 +5,7 @@ export abstract class ASTNode implements Indexable {
   type: ASTNodeType;
   row: number;
   col: number;
+  fileName?: string; /* used for imports */
   constructor(type: ASTNodeType, row: number, col: number) {
     this.type = type;
     this.row = row;
@@ -22,7 +23,7 @@ export class Program extends ASTNode {
     this.body = body;
   }
 }
-export class Raw extends ASTNode {
+export class RawStatement extends ASTNode {
   accept<T>(visitor: Visitor<T>): T {
     return visitor.visitRaw(this);
   }
@@ -88,7 +89,7 @@ export class IfStatement extends ASTNode {
   }
   condition: ASTNode;
   trueBranch: ASTNode;
-  falseBranch: ASTNode;
+  falseBranch: ASTNode | undefined;
   constructor(condition: ASTNode, trueBranch: ASTNode, falseBranch: ASTNode, row: number, col: number) {
     super(ASTNodeType._IF, row, col);
     this.condition = condition;
@@ -138,6 +139,16 @@ export class LoopStatement extends ASTNode {
     this.body = body;
   }
 }
+export class ExecStatement extends ASTNode {
+  accept<T>(visitor: Visitor<T>): T {
+    return visitor.visitExecStatement(this);
+  }
+  command: ASTNode;
+  constructor(command: ASTNode, row: number, col: number) {
+    super(ASTNodeType._EXEC, row, col);
+    this.command = command;
+  }
+}
 export class URLStatement extends ASTNode {
   accept<T>(visitor: Visitor<T>): T {
     return visitor.visitURLStatement(this);
@@ -163,9 +174,13 @@ export class UseStatement extends ASTNode {
     return visitor.visitUseStatement(this);
   }
   code: ASTNode;
-  constructor(code: ASTNode, row: number, col: number) {
+  params: Params | undefined;
+  hash: ASTNode | undefined;
+  constructor(code: ASTNode, params: Params | undefined = undefined, hash: ASTNode | undefined, row: number, col: number) {
     super(ASTNodeType._USE, row, col);
     this.code = code;
+    this.params = params;
+    this.hash = hash;
   }
 }
 export class EvalStatement extends ASTNode {
@@ -193,10 +208,10 @@ export class Comment extends ASTNode {
 //   if (inputAST.type === inputASTNodeType) return inputAST as unknown as O;
 //   return new outputClass(inputAST.row, inputAST.col);
 // }
-export function convertRawToEval(input: Raw | EvalStatement): EvalStatement {
+export function convertRawToEval(input: RawStatement | EvalStatement): EvalStatement {
   if (input.type === ASTNodeType.EVAL) return input as EvalStatement;
-  return new EvalStatement((input as Raw).value, input.row, input.col);
+  return new EvalStatement((input as RawStatement).value, input.row, input.col);
 }
-export function convertEvalToRaw(input: EvalStatement): Raw {
-  return new Raw(input.expr, input.row, input.col);
+export function convertEvalToRaw(input: EvalStatement): RawStatement {
+  return new RawStatement(input.expr, input.row, input.col);
 }

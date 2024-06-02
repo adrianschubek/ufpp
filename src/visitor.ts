@@ -3,6 +3,7 @@ import {
   CaseStatement,
   Comment,
   EvalStatement,
+  ExecStatement,
   FileStatement,
   FunctionCall,
   FunctionDefinition,
@@ -11,19 +12,26 @@ import {
   MatchStatement,
   Params,
   Program,
-  Raw,
+  RawStatement,
   URLStatement,
   UseStatement,
 } from "./ast";
-import { BuiltInFunction, assertCount, assertFnArgCount, assertFnArgRange, assertParamCount, err as trueErr, truthy, warn } from "./common";
-
-function err(msg: string, node: ASTNode): never {
-  return trueErr(msg, ...rowcol(node));
-}
+import {
+  BuiltInFunction,
+  Config,
+  assertCount,
+  assertFnArgCount,
+  assertFnArgRange,
+  assertParamCount,
+  rowcol,
+  err as trueErr,
+  truthy,
+  warn as trueWarn,
+} from "./common";
 
 export interface Visitor<T> {
   visitProgram(node: Program): T;
-  visitRaw(node: Raw): T;
+  visitRaw(node: RawStatement): T;
   visitFunctionCall(node: FunctionCall): T;
   visitFunctionDefinition(node: FunctionDefinition): T;
   visitParams(node: Params): T;
@@ -36,27 +44,62 @@ export interface Visitor<T> {
   visitUseStatement(node: UseStatement): T;
   visitEvalStatement(node: EvalStatement): T;
   visitComment(node: Comment): T;
+  visitExecStatement(node: ExecStatement): T;
 }
 
 interface DeclaredFunction {
   fnArgs: string[];
   fnBody: ASTNode;
 }
-interface InterpreterOptions {
-  ignoreOverride: boolean;
-}
 
-export function interpret(program: ASTNode /* , config: cfg */): string {
-  const intp = new Interpreter();
+export function interpret(program: ASTNode, config: Config): string {
+  const intp = new Interpreter(config);
   return program.accept(intp);
 }
 
 export class Interpreter implements Visitor<string> {
   parent: Interpreter | null = null;
   functions = new Map<string, DeclaredFunction>();
-  options: InterpreterOptions = {
-    ignoreOverride: false,
-  };
+  config: Config;
+
+  err: (msg: string, node: ASTNode) => never = (msg, node) =>
+    trueErr(msg, node.row, node.col, node.fileName !== undefined ? { ...this.config, fileName: node.fileName } : this.config);
+  warn: (msg: string, node: ASTNode) => void = (msg, node) =>
+    trueWarn(msg, node.row, node.col, node.fileName !== undefined ? { ...this.config, fileName: node.fileName } : this.config);
+
+  constructor(config: Config) {
+    this.config = config;
+  }
+  visitExecStatement(node: ExecStatement): string {
+    if (this.config.exec !== "true") {
+      this.warn("Command execution is disabled. Skipping code", node);
+      return "";
+    }
+
+    throw new Error("Method not implemented.");
+  }
+
+  /**
+   * Forbidden names
+   */
+  validateNameNoBuiltin(name: string, node: ASTNode) {
+    if (Object.values(BuiltInFunction).includes(name as BuiltInFunction) || Object.values(BuiltInFunction).includes((name + "!") as BuiltInFunction))
+      /* reserve names and their evald version */
+      this.err(`Built-in function \\${name} cannot be modified`, node);
+  }
+  /**
+   * no start with $
+   */
+  validateNameNoDollar(name: string, node: ASTNode) {
+    if (name.startsWith("$")) this.err(`Function \\${name} cannot start with "$"`, node);
+  }
+
+  visitMatchStatement(node: MatchStatement): string {
+    throw new Error("Method not implemented.");
+  }
+  visitCaseStatement(node: CaseStatement): string {
+    throw new Error("Method not implemented.");
+  }
 
   visitProgram(node: Program): string {
     let output = "";
@@ -65,7 +108,7 @@ export class Interpreter implements Visitor<string> {
     }
     return output;
   }
-  visitRaw(node: Raw): string {
+  visitRaw(node: RawStatement): string {
     return node.value;
   }
   visitFunctionCall(node: FunctionCall): string {
@@ -92,7 +135,7 @@ export class Interpreter implements Visitor<string> {
         // Set a variable
         assertFnArgCount(node, fnName, 2, args);
         assertParamCount(node, fnName, 0, node.params);
-        validateNameNoBuiltin(args[0], node);
+        this.validateNameNoBuiltin(args[0], node);
         // validateNameNoBuiltin(newVar, node);
 
         // if (isEval) {
@@ -101,29 +144,26 @@ export class Interpreter implements Visitor<string> {
 
         this.functions.set(`\$${args[0]}`, {
           fnArgs: [],
-          fnBody: new Raw(args[1], ...rowcol(node)),
+          fnBody: new RawStatement(args[1], ...rowcol(node)),
           // fnBody: isEval ? new EvalStatement(args[1], ...rowcol(node)) : new Raw(args[1], ...rowcol(node)),
         });
         return "";
       case BuiltInFunction.TOPARENT: // \toparent{funcname} copy fun to parent scope
         assertFnArgCount(node, fnName, 1, args);
         assertParamCount(node, fnName, 0, node.params);
-        validateNameNoBuiltin(args[0], node);
+        this.validateNameNoBuiltin(args[0], node);
 
         // fetch from current scope
         declaredFn = this.functions.get(args[0]);
         if (declaredFn === undefined) {
           if (this.functions.has("\\$" + args[0].slice(1)))
-            warn(
-              `${args[0]} was not found in current scope but a variable \\\$${args[0]} exists. Perhaps you meant to call this one.`,
-              ...rowcol(node)
-            );
-          else warn(`${args[0]} was not found in current scope.`, ...rowcol(node));
+            this.warn(`${args[0]} was not found in current scope but a variable \\\$${args[0]} exists. Perhaps you meant to call this one.`, node);
+          else this.warn(`${args[0]} was not found in current scope.`, node);
           return "";
         }
 
         if (this.parent === null) {
-          warn(`Cannot move ${args[0]} to parent scope. No parent scope exists`, ...rowcol(node));
+          this.warn(`Cannot move ${args[0]} to parent scope. No parent scope exists`, node);
           return "";
         }
 
@@ -133,17 +173,17 @@ export class Interpreter implements Visitor<string> {
       case BuiltInFunction.TOCHILD: // \tochild{funcname} copy fun from parent to child scope (this)
         assertFnArgCount(node, fnName, 1, args);
         assertParamCount(node, fnName, 0, node.params);
-        validateNameNoBuiltin(args[0], node);
+        this.validateNameNoBuiltin(args[0], node);
 
         // fetch from parent scope
         if (this.parent === null) {
-          warn(`Cannot move ${args[0]} to child scope. No parent scope exists`, ...rowcol(node));
+          this.warn(`Cannot move ${args[0]} to child scope. No parent scope exists`, node);
           return "";
         }
 
         declaredFn = this.parent.functions.get(args[0]);
         if (declaredFn === undefined) {
-          warn(`${args[0]} was not found in parent scope`, ...rowcol(node));
+          this.warn(`${args[0]} was not found in parent scope`, node);
           return "";
         }
 
@@ -151,18 +191,20 @@ export class Interpreter implements Visitor<string> {
         this.functions.set(args[0], declaredFn);
         return "";
       case BuiltInFunction.DEL: // \delf{funcname} remove function from current scope
+      case BuiltInFunction.DEL + "!": // \delf{funcname} remove function from current scope
         assertFnArgCount(node, fnName, 1, args);
         assertParamCount(node, fnName, 0, node.params);
-        validateNameNoBuiltin(args[0], node);
+        this.validateNameNoBuiltin(args[0], node);
 
         if (!this.functions.delete(args[0])) {
-          warn(`${args[0]} was not found in current scope`, ...rowcol(node));
+          this.warn(`${args[0]} was not found in current scope`, node);
         }
         return "";
       case BuiltInFunction.HALT:
+      case BuiltInFunction.HALT + "!":
         assertFnArgRange(node, fnName, 0, 1, args);
         assertParamCount(node, fnName, 0, node.params);
-        err("Execution halted" + (args[0] ? ". " + args[0] : ""), node);
+        this.err("Execution halted" + (args[0] ? ". " + args[0] : ""), node);
       default:
         // check for declared functions
         // args.map((arg) => arg.accept(this));
@@ -173,12 +215,14 @@ export class Interpreter implements Visitor<string> {
     if (declaredFn === undefined && this.parent) return this.parent.visitFunctionCall(node);
     if (declaredFn === undefined) {
       if (this.functions.has(`\$${fnName}`)) {
-        err(`\\${fnName} was not found in current scope but a variable \\\$${fnName} exists. Perhaps you meant to call this one.`, node);
+        this.err(`\\${fnName} was not found in current scope but a variable \\\$${fnName} exists. Perhaps you meant to call this one.`, node);
       } else if (this.functions.has(`\\${fnName}`)) {
         //FIXME:
-        err(`\\\$${fnName} was not found in current scope but a function \\${fnName} exists. Perhaps you meant to call this one.`, node);
+        this.err(`\\\$${fnName} was not found in current scope but a function \\${fnName} exists. Perhaps you meant to call this one.`, node);
       } else {
-        err(`Function \\${fnName} is undefined`, node);
+        console.log("xxxx", node);
+
+        this.err(`Function \\${fnName} is undefined`, node);
       }
     }
 
@@ -186,16 +230,16 @@ export class Interpreter implements Visitor<string> {
     if (args.length !== declaredFn.fnArgs.length) assertCount("arguments", `in function \\${fnName}`, node, declaredFn.fnArgs.length, args);
 
     // new scope (new interpreter) with variables as $functions
-    const newScope = new Interpreter();
+    const newScope = new Interpreter(this.config);
     newScope.parent = this;
     // push arguments to new scope as [foo,...] => [$foo,...]
     for (let i = 0; i < declaredFn.fnArgs.length; i++) {
       // variables == functions
-      newScope.functions.set(`\$${declaredFn.fnArgs[i]}`, { fnArgs: [], fnBody: new Raw(args[i], ...rowcol(node)) });
+      newScope.functions.set(`\$${declaredFn.fnArgs[i]}`, { fnArgs: [], fnBody: new RawStatement(args[i], ...rowcol(node)) });
     }
     // push params to new scope as {foo: 123} => $p_foo -> 123
     for (const key in fnParams) {
-      newScope.functions.set(`\$p_${key}`, { fnArgs: [], fnBody: new Raw(fnParams[key] ?? "", ...rowcol(node)) });
+      newScope.functions.set(`\$p_${key}`, { fnArgs: [], fnBody: new RawStatement(fnParams[key] ?? "", ...rowcol(node)) });
     }
 
     // also create positional arguments $1, $2, ...
@@ -206,8 +250,8 @@ export class Interpreter implements Visitor<string> {
   visitFunctionDefinition(node: FunctionDefinition): string {
     const fnName = node.name.accept(this);
     // check for banned function names
-    validateNameNoDollar(fnName, node.name);
-    validateNameNoBuiltin(fnName, node.name);
+    this.validateNameNoDollar(fnName, node.name);
+    this.validateNameNoBuiltin(fnName, node.name);
 
     const decodedArgs = decode<{ [key: string]: string | null }>(node.fnArgs.accept(this));
     const fnArgs = Object.keys(decodedArgs);
@@ -247,7 +291,7 @@ export class Interpreter implements Visitor<string> {
     throw new Error("Method not implemented.");
   }
   visitUseStatement(node: UseStatement): string {
-    throw new Error("Method not implemented.");
+    return "";
   }
   visitEvalStatement(node: EvalStatement): string {
     const js = node.expr;
@@ -260,6 +304,12 @@ export class Interpreter implements Visitor<string> {
       }
     }
 
+    if (this.config.eval !== "true") {
+      this.warn("JavaScript evaluation is disabled. Skipping code", node);
+      //  skip or print code?
+      return "";
+      // return js;
+    }
     return evaluate(js, context);
   }
   visitComment(node: Comment): string {
@@ -273,10 +323,6 @@ function encode<T>(s: T): string {
 
 function decode<T>(s: string): T {
   return JSON.parse(s) as T;
-}
-
-function rowcol(token: ASTNode): [number, number] {
-  return [token.row, token.col];
 }
 
 function evaluate(code: string, context: { [key: string]: string | null }): string {
@@ -314,19 +360,6 @@ function evaluate(code: string, context: { [key: string]: string | null }): stri
   // console.log(template);
   // console.log("_____________________");
   // return Function(template)();
-}
-
-/**
- * Forbidden names
- */
-function validateNameNoBuiltin(name: string, node: ASTNode) {
-  if (Object.values(BuiltInFunction).includes(name as BuiltInFunction)) err(`Built-in function \\${name} cannot be modified`, node);
-}
-/**
- * no start with $
- */
-function validateNameNoDollar(name: string, node: ASTNode) {
-  if (name.startsWith("$")) err(`Function \\${name} cannot start with "$"`, node);
 }
 
 /**

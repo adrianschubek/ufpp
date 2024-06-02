@@ -1,4 +1,4 @@
-import { TokenType, err } from "./common";
+import { TokenType, err as trueErr } from "./common";
 import type { Token, Config } from "./common";
 
 const ROW_OFFSET = 0;
@@ -8,6 +8,10 @@ export function tokenize(input: string, config: Config): Token[] {
   let col = 0;
   let index = 0;
   const tokens: Token[] = [];
+
+  function err(msg: string, row: number, col: number): never {
+    trueErr(msg, row, col, config);
+  }
 
   // track position for col and row index
   function track(consumed: string) {

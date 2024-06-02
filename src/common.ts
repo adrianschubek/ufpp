@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import { Params } from "./ast";
+import { ASTNode, Params } from "./ast";
 
 export enum TokenType {
   T_RAW = "T_RAW",
@@ -29,9 +29,11 @@ export enum ASTNodeType {
   _LOOP = "_LOOP",
   _URL = "_URL",
   _FILE = "_FILE",
-  _USE = "_USE" /* imports. nein: must be top level. parse file then interpret */,
+  _USE = "_USE" /* imports. ast mergen. analyzer. nein: must be top level. parse file then interpret */,
+  _COMPILE = "_COMPILE" /* wie \file nur mit pieplien komplett interpret -> string. \compile{\file{other.utpp}} */,
   _MATCH = "_MATCH",
   _CASE = "_CASE",
+  _EXEC = "_EXEC",
 }
 
 // built in cannot be overriden
@@ -55,8 +57,10 @@ export enum BuiltInFunction {
   FALSE = "false",
   HALT = "halt" /* stop exec immediate */,
   ASSERT = "assert" /* assert function */,
+  COMPILE = "compile",
   MATCH = "match",
   CASE = "case",
+  EXEC = "exec",
 }
 
 // export interface Config {
@@ -80,6 +84,10 @@ export enum BuiltInFunction {
 export type Config = { [key in ConfigKey]: string };
 
 export type ConfigKey =
+  | "fileName"
+  | "filePath"
+  | "fileEncoding"
+  | "version"
   /* Lexer */
   | "prefix"
   | "argStart"
@@ -91,14 +99,20 @@ export type ConfigKey =
   | "evalStart"
   | "evalEnd"
   /* Visitor */
-  | "readUrls"
-  | "readFiles"
-  | "readEnv"
-  | "eval";
+  | "net" /* read.. */
+  | "files"
+  | "env"
+  | "eval"
+  | "imports" /* use */
+  | "exec"; /* shell commands */
 // | "allowBuiltinOverride";
 // | string /* custom config key */;
 
 export const DefaultConfig: Config = {
+  fileName: "",
+  filePath: "",
+  fileEncoding: "utf8",
+  version: "1",
   /* Tokens */
   prefix: "\\",
   argStart: "{",
@@ -110,10 +124,12 @@ export const DefaultConfig: Config = {
   evalStart: "`",
   evalEnd: "`",
   /* Visitor */
-  readUrls: "true",
-  readFiles: "true",
-  readEnv: "true",
+  net: "true",
+  files: "true",
+  env: "true",
   eval: "true",
+  imports: "true",
+  exec: "false",
   // allowBuiltinOverride: "false",
 };
 
@@ -129,6 +145,10 @@ export interface Indexable {
   col: number;
 }
 
+export function rowcol(token: ASTNode): [number, number] {
+  return [token.row, token.col];
+}
+
 /**
  * Check RAW for truthy values
  *
@@ -138,37 +158,44 @@ export function truthy(value: string): boolean {
   return /* val !== "false" && val !== "0" &&  */ val !== "$false";
 }
 
-export function info(msg: string, row?: number, col?: number): void {
+function msgTemplate(msg: string, row?: number, col?: number, config?: Config): string {
+  const msgFileName = config?.fileName !== undefined ? `in ${config.fileName}` : "";
+  const msgRowCol = row !== undefined && col !== undefined ? `on line ${row}:${col}` : "";
+  return `${msg} ${msgRowCol} ${msgFileName}`;
+}
+
+export function info(msg: string, row?: number, col?: number, config?: Config): void {
   // can be silenced with "-q"
-  console.log("ℹ️ " + chalk.cyanBright(` ${msg} ${row !== undefined && col !== undefined ? `on line ${row}:${col}.` : ""}`));
+  console.log("ℹ️ " + chalk.gray(msgTemplate(msg, row, col, config)));
 }
 
-export function warn(msg: string, row?: number, col?: number): void {
-  // treat warning as errors config?
-  console.log("⚠️ " + chalk.yellow(` ${msg} ${row !== undefined && col !== undefined ? `on line ${row}:${col}.` : ""}`));
+export function warn(msg: string, row?: number, col?: number, config?: Config): void {
+  console.log("⚠️ " + chalk.yellow(msgTemplate(msg, row, col, config)));
 }
 
-export function err(msg: string, row?: number, col?: number): never {
-  throw new Error("🔥 " + chalk.red(`${msg} ${row !== undefined && col !== undefined ? `on line ${row}:${col}.` : ""}`));
+export function err(msg: string, row?: number, col?: number, config?: Config): never {
+  throw new Error("🔥 " + chalk.red(msgTemplate(msg, row, col, config)));
 }
 
-export function assertCount<T>(text: string, details: string, thisToken: Indexable, count: number, args?: T[]) {
+export function assertCount<T>(text: string, details: string, thisToken: Indexable, count: number, args?: T[], config?: Config) {
   let actual = args?.length ?? 0;
   if (actual !== count) {
     err(
       `Expected ${chalk.redBright(count)} ${text} but got ${chalk.redBright(actual === 0 ? "none" : actual)} ${details}`,
       thisToken.row,
-      thisToken.col
+      thisToken.col,
+      config
     );
   }
 }
-export function assertRange<T>(text: string, details: string, thisToken: Indexable, min: number, max: number, args?: T[]) {
+export function assertRange<T>(text: string, details: string, thisToken: Indexable, min: number, max: number, args?: T[], config?: Config) {
   let actual = args?.length ?? 0;
   if (actual < min || actual > max) {
     err(
       `Expected ${chalk.redBright(min)} to ${chalk.redBright(max)} ${text} but got ${chalk.redBright(actual === 0 ? "none" : actual)} ${details}`,
       thisToken.row,
-      thisToken.col
+      thisToken.col,
+      config
     );
   }
 }

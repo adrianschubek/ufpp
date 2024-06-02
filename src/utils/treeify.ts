@@ -1,3 +1,4 @@
+// @ts-nocheck
 //     treeify.js
 //     Luke Plaster <notatestuser@gmail.com>
 //     https://github.com/notatestuser/treeify.js
