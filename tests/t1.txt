@@ -7,6 +7,21 @@ Die Zeit ist  \${new Date()}.
   \toparent{$\$name}
 } 
 
+\f{true}{\true}
+\f{false}{\false}
+
+wie latex mit placehodlers
+\f[2]{and}{\and{#1}{#2}}
+
+\true
+\false
+\not{}
+\and{}{}{}...
+\or{}{}
+
+allow dynamic number of arguments
+
+
 \var!{b}{" => " + 0.2+0.3 }
 
 \var{a}{0.2+0.3}
@@ -21,5 +36,36 @@ Die Zeit ist  \${new Date()}.
 
 \add{42}{69}
 
+\not{}
 
-\if{$false}{true}{false}
+\if{\false}{T}{F}
+\if{123}{TT}
+
+
+
+
+
+
+
+\halt{fertig}
+
+Match:
+\match{value}{
+  Dies
+  \case{foo}{123}
+  Ist
+  \case{bar}{456}
+  Ein
+  \case{true}{999} \# default
+  Test
+}
+
+
+
+\\\utpp[
+  uuu=9,
+  prefix=a,
+]
+\\\utpp[
+  prefix=\,
+]

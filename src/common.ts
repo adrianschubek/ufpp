@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import { ASTNode, Params } from "./ast";
+import { Params } from "./ast";
 
 export enum TokenType {
   T_RAW = "T_RAW",
@@ -29,7 +29,9 @@ export enum ASTNodeType {
   _LOOP = "_LOOP",
   _URL = "_URL",
   _FILE = "_FILE",
-  _USE = "_USE" /* imports. must be top level. parse file then interpret */,
+  _USE = "_USE" /* imports. nein: must be top level. parse file then interpret */,
+  _MATCH = "_MATCH",
+  _CASE = "_CASE",
 }
 
 // built in cannot be overriden
@@ -49,11 +51,71 @@ export enum BuiltInFunction {
   FILE = "file",
   USE = "use",
   VAR = "var",
-  TRUE = "$true",
-  FALSE = "$false",
+  TRUE = "true",
+  FALSE = "false",
   HALT = "halt" /* stop exec immediate */,
   ASSERT = "assert" /* assert function */,
+  MATCH = "match",
+  CASE = "case",
 }
+
+// export interface Config {
+//   /* Tokens */
+//   prefix: string;
+//   argStart: string;
+//   argEnd: string;
+//   paramStart: string;
+//   paramAssign: string;
+//   paramSep: string;
+//   paramEnd: string;
+//   evalStart: string;
+//   evalEnd: string;
+//   /* Visitor */
+//   readUrls: boolean;
+//   readFiles: boolean;
+//   readEnv: boolean;
+//   eval: boolean;
+// }
+
+export type Config = { [key in ConfigKey]: string };
+
+export type ConfigKey =
+  /* Lexer */
+  | "prefix"
+  | "argStart"
+  | "argEnd"
+  | "paramStart"
+  | "paramAssign"
+  | "paramSep"
+  | "paramEnd"
+  | "evalStart"
+  | "evalEnd"
+  /* Visitor */
+  | "readUrls"
+  | "readFiles"
+  | "readEnv"
+  | "eval";
+// | "allowBuiltinOverride";
+// | string /* custom config key */;
+
+export const DefaultConfig: Config = {
+  /* Tokens */
+  prefix: "\\",
+  argStart: "{",
+  argEnd: "}",
+  paramStart: "[",
+  paramAssign: "=",
+  paramSep: ",",
+  paramEnd: "]",
+  evalStart: "`",
+  evalEnd: "`",
+  /* Visitor */
+  readUrls: "true",
+  readFiles: "true",
+  readEnv: "true",
+  eval: "true",
+  // allowBuiltinOverride: "false",
+};
 
 export interface Token extends Indexable {
   type: TokenType;
@@ -67,10 +129,6 @@ export interface Indexable {
   col: number;
 }
 
-export interface Visitor {
-  visit(node: ASTNode): void;
-}
-
 /**
  * Check RAW for truthy values
  *
@@ -80,13 +138,18 @@ export function truthy(value: string): boolean {
   return /* val !== "false" && val !== "0" &&  */ val !== "$false";
 }
 
+export function info(msg: string, row?: number, col?: number): void {
+  // can be silenced with "-q"
+  console.log("ℹ️ " + chalk.cyanBright(` ${msg} ${row !== undefined && col !== undefined ? `on line ${row}:${col}.` : ""}`));
+}
+
 export function warn(msg: string, row?: number, col?: number): void {
   // treat warning as errors config?
-  console.log("⚠️ " + chalk.yellow(` ${msg} ${row !== undefined && col !== undefined ? `on line ${row}:${col}.` : ""}\n`));
+  console.log("⚠️ " + chalk.yellow(` ${msg} ${row !== undefined && col !== undefined ? `on line ${row}:${col}.` : ""}`));
 }
 
 export function err(msg: string, row?: number, col?: number): never {
-  throw new Error("🔥 " + chalk.red(`${msg} ${row !== undefined && col !== undefined ? `on line ${row}:${col}.` : ""}\n`));
+  throw new Error("🔥 " + chalk.red(`${msg} ${row !== undefined && col !== undefined ? `on line ${row}:${col}.` : ""}`));
 }
 
 export function assertCount<T>(text: string, details: string, thisToken: Indexable, count: number, args?: T[]) {
@@ -118,6 +181,9 @@ export function assertFnArgRange<T>(thisToken: Indexable, fnName: string, min: n
 }
 export function assertParamCount(thisToken: Indexable, fnName: string, count: number, params: Params | null) {
   assertCount("parameters", `in function \\${fnName}`, thisToken, count, params?.kv ? Object.values(params.kv) : undefined);
+}
+export function assertParamRange(thisToken: Indexable, fnName: string, min: number, max: number, params: Params | null) {
+  assertRange("parameters", `in function \\${fnName}`, thisToken, min, max, params?.kv ? Object.values(params.kv) : undefined);
 }
 
 export function assertType<T>(details: string, thisToken: Indexable, expected: T, actual: T) {

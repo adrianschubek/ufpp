@@ -1,5 +1,6 @@
 import {
   ASTNode,
+  CaseStatement,
   Comment,
   EvalStatement,
   FileStatement,
@@ -7,13 +8,14 @@ import {
   FunctionDefinition,
   IfStatement,
   LoopStatement,
+  MatchStatement,
   Params,
   Program,
   Raw,
   URLStatement,
   UseStatement,
 } from "./ast";
-import { BuiltInFunction, assertCount, assertFnArgCount, assertParamCount, err as trueErr, warn } from "./common";
+import { BuiltInFunction, assertCount, assertFnArgCount, assertFnArgRange, assertParamCount, err as trueErr, truthy, warn } from "./common";
 
 function err(msg: string, node: ASTNode): never {
   return trueErr(msg, ...rowcol(node));
@@ -26,6 +28,8 @@ export interface Visitor<T> {
   visitFunctionDefinition(node: FunctionDefinition): T;
   visitParams(node: Params): T;
   visitIfStatement(node: IfStatement): T;
+  visitMatchStatement(node: MatchStatement): T;
+  visitCaseStatement(node: CaseStatement): T;
   visitLoopStatement(node: LoopStatement): T;
   visitURLStatement(node: URLStatement): T;
   visitFileStatement(node: FileStatement): T;
@@ -38,10 +42,21 @@ interface DeclaredFunction {
   fnArgs: string[];
   fnBody: ASTNode;
 }
+interface InterpreterOptions {
+  ignoreOverride: boolean;
+}
+
+export function interpret(program: ASTNode /* , config: cfg */): string {
+  const intp = new Interpreter();
+  return program.accept(intp);
+}
 
 export class Interpreter implements Visitor<string> {
   parent: Interpreter | null = null;
   functions = new Map<string, DeclaredFunction>();
+  options: InterpreterOptions = {
+    ignoreOverride: false,
+  };
 
   visitProgram(node: Program): string {
     let output = "";
@@ -61,11 +76,12 @@ export class Interpreter implements Visitor<string> {
     const fnParams = decode<{ [key: string]: string | null }>(node.params.accept(this));
     // params are available as {foo: 123} => $PARAM_FOO -> 123
 
-    const isVar = fnName.startsWith("$");
-    const isEval = fnName.endsWith("!");
+    // const isVar = fnName.startsWith("$");
+    // const isEval = fnName.endsWith("!");
     // if isEval convert arguments from Raw to EvalStatement:
     // -> do not evaluate arguments
     // -> before: args.0.prog.raw --> args.0.prog.eval    assert args.0.prog.length === 1 !!!
+    // nei ngehört hier garnicht rein sondern in parser!!
 
     // check for built-in functions (except if,f,loop,..). cannot be overridden
     let declaredFn: DeclaredFunction | undefined;
@@ -144,7 +160,9 @@ export class Interpreter implements Visitor<string> {
         }
         return "";
       case BuiltInFunction.HALT:
-        err(`Execution halted`, node);
+        assertFnArgRange(node, fnName, 0, 1, args);
+        assertParamCount(node, fnName, 0, node.params);
+        err("Execution halted" + (args[0] ? ". " + args[0] : ""), node);
       default:
         // check for declared functions
         // args.map((arg) => arg.accept(this));
@@ -180,6 +198,9 @@ export class Interpreter implements Visitor<string> {
       newScope.functions.set(`\$p_${key}`, { fnArgs: [], fnBody: new Raw(fnParams[key] ?? "", ...rowcol(node)) });
     }
 
+    // also create positional arguments $1, $2, ...
+    // and do with pareamete \f[minarg=0,maxargs=5]...
+
     return declaredFn.fnBody.accept(newScope);
   }
   visitFunctionDefinition(node: FunctionDefinition): string {
@@ -207,7 +228,7 @@ export class Interpreter implements Visitor<string> {
   }
   visitIfStatement(node: IfStatement): string {
     const cond = node.condition.accept(this);
-    if (cond) return node.trueBranch.accept(this);
+    if (truthy(cond)) return node.trueBranch.accept(this);
     if (node.falseBranch !== undefined) return node.falseBranch.accept(this);
     return "";
   }

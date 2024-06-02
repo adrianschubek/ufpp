@@ -96,6 +96,32 @@ export class IfStatement extends ASTNode {
     this.falseBranch = falseBranch;
   }
 }
+export class MatchStatement extends ASTNode {
+  accept<T>(visitor: Visitor<T>): T {
+    return visitor.visitMatchStatement(this);
+  }
+  value: ASTNode;
+  cases: CaseStatement[]; // eval from first to last
+  // defaultCase: ASTNode; // nicht nötig einfach \case{true}{...}
+  constructor(value: ASTNode, cases: CaseStatement[], row: number, col: number) {
+    super(ASTNodeType._MATCH, row, col);
+    this.value = value;
+    this.cases = cases;
+  }
+}
+export class CaseStatement extends ASTNode {
+  accept<T>(visitor: Visitor<T>): T {
+    return visitor.visitCaseStatement(this);
+  }
+  value: ASTNode;
+  body: ASTNode;
+  constructor(value: ASTNode, body: ASTNode, row: number, col: number) {
+    super(ASTNodeType._CASE, row, col);
+    this.value = value;
+    this.body = body;
+  }
+}
+
 export class LoopStatement extends ASTNode {
   accept<T>(visitor: Visitor<T>): T {
     return visitor.visitLoopStatement(this);

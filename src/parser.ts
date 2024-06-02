@@ -1,3 +1,4 @@
+import { log } from "console";
 import {
   ASTNode,
   Raw,
@@ -13,7 +14,7 @@ import {
   FileStatement,
   UseStatement,
 } from "./ast";
-import { BuiltInFunction, Token, TokenType, assertCount, assertRange, assertType, err } from "./common";
+import { BuiltInFunction, Token, TokenType, assertCount, assertRange, err } from "./common";
 
 // ne Build CST from tokens like \if{}{} --> Command(name="if",args=2...)
 // ne  Build AST from CST like Command(name="if",args=2...) --> IfStatement(condition=...,trueBranch=...,falseBranch=...)
@@ -116,25 +117,24 @@ export function parse(input: Token[], isRecursiveCall: boolean = false): ASTNode
   }
 
   function parseArguments(alwaysEvalNArgs?: number): ASTNode[] {
-    const as = consume(TokenType.T_ARG_START);
     const args: ASTNode[] = [];
 
     // FIXME may break if JS contains { }.
-    while (alwaysEvalNArgs && alwaysEvalNArgs > 0) {
+    while (alwaysEvalNArgs && alwaysEvalNArgs > 0 && hasMore() && option(TokenType.T_ARG_START)) {
+      const as = consume(TokenType.T_ARG_START);
       alwaysEvalNArgs--;
       let evalCode = "";
+      log("uhhhhhhhhhhhhhhhhhhhhhhhhhhh", alwaysEvalNArgs);
       while (!option(TokenType.T_ARG_END)) evalCode += consumeAny().value;
       consume(TokenType.T_ARG_END);
-      consume(TokenType.T_ARG_START);
       args.push(new EvalStatement(evalCode, ...rowcol(as)));
     }
 
-    while (hasMore()) {
+    while (hasMore() && option(TokenType.T_ARG_START)) {
+      consume(TokenType.T_ARG_START);
       const arg = parse(input, true);
       args.push(arg);
       consume(TokenType.T_ARG_END);
-      if (!option(TokenType.T_ARG_START)) break;
-      consume(TokenType.T_ARG_START);
     }
 
     return args;

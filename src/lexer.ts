@@ -1,45 +1,9 @@
-import { log } from "console";
 import { TokenType, err } from "./common";
-import type { Token } from "./common";
+import type { Token, Config } from "./common";
 
 const ROW_OFFSET = 0;
-const INDEX_OFFSET = 0;
-const PREFIX = "\\";
-const ARG_START = "{";
-const ARG_END = "}";
-const PARAM_START = "[";
-const PARAM_ASSIGN = "=";
-const PARAM_SEP = ",";
-const PARAM_END = "]";
-const EVAL_START = "`";
-const EVAL_END = "`";
 
-export interface TokenizerConfig {
-  prefix: string;
-  argStart: string;
-  argEnd: string;
-  paramStart: string;
-  paramAssign: string;
-  paramSep: string;
-  paramEnd: string;
-  evalStart: string;
-  evalEnd: string;
-}
-
-export function tokenize(
-  input: string,
-  config: TokenizerConfig = {
-    prefix: PREFIX,
-    argStart: ARG_START,
-    argEnd: ARG_END,
-    paramStart: PARAM_START,
-    paramAssign: PARAM_ASSIGN,
-    paramSep: PARAM_SEP,
-    paramEnd: PARAM_END,
-    evalStart: EVAL_START,
-    evalEnd: EVAL_END,
-  }
-): Token[] {
+export function tokenize(input: string, config: Config): Token[] {
   let row = 0 - ROW_OFFSET; // offset for inserted statements
   let col = 0;
   let index = 0;
